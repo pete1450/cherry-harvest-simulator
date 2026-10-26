@@ -18,14 +18,14 @@ html = """<!DOCTYPE html>
 #align{top:86px;left:50%;transform:translateX(-50%);text-align:center;font-size:14px;font-weight:600;text-shadow:0 1px 3px #000;max-width:92vw}
 #steps{bottom:118px;left:50%;transform:translateX(-50%);font-size:13px;text-align:center}
 #msg{bottom:92px;left:50%;transform:translateX(-50%);font-size:13px;color:#ffe27a;text-align:center;max-width:92vw}
-button{pointer-events:auto;cursor:pointer;border:0;border-radius:12px;padding:10px 12px;font-weight:700;font-size:13px;background:#ffd23f;color:#222}
+button{pointer-events:auto;cursor:pointer;border:0;border-radius:12px;padding:10px 12px;font-weight:700;font-size:13px;background:#ffd23f;color:#222;user-select:none;-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;-webkit-touch-callout:none;touch-action:none}
 button:active{transform:scale(.96)}
-#controls{bottom:12px;left:10px;right:10px;display:flex;justify-content:space-between;align-items:flex-end;gap:8px}
+#controls{bottom:12px;left:10px;right:10px;display:flex;justify-content:space-between;align-items:flex-end;gap:8px;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
 #joy{pointer-events:auto;width:110px;height:110px;border-radius:50%;background:rgba(0,0,0,.35);border:2px solid rgba(255,255,255,.4);position:relative;touch-action:none}
 #knob{position:absolute;left:50%;top:50%;width:48px;height:48px;margin:-24px;border-radius:50%;background:#ffd23f;box-shadow:0 2px 8px #000}
 #btns{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;max-width:62vw}
 #btns button{background:rgba(20,30,20,.85);color:#fff;border:1px solid rgba(255,255,255,.35)}
-#shakebtn{background:#d21f2e!important;color:#fff!important;padding:14px 16px}
+#shakebtn{background:#d21f2e!important;color:#fff!important;padding:14px 16px;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:none}
 #levers{top:130px;right:10px;display:flex;gap:10px}
 .lever{text-align:center;font-size:11px}
 .lever .stick{width:8px;height:52px;background:#ddd;margin:4px auto 2px;border-radius:4px;transform-origin:bottom center;transition:transform .25s}

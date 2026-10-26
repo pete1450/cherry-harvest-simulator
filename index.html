@@ -14,14 +14,14 @@
 #align{top:86px;left:50%;transform:translateX(-50%);text-align:center;font-size:14px;font-weight:600;text-shadow:0 1px 3px #000;max-width:92vw}
 #steps{bottom:118px;left:50%;transform:translateX(-50%);font-size:13px;text-align:center}
 #msg{bottom:92px;left:50%;transform:translateX(-50%);font-size:13px;color:#ffe27a;text-align:center;max-width:92vw}
-button{pointer-events:auto;cursor:pointer;border:0;border-radius:12px;padding:10px 12px;font-weight:700;font-size:13px;background:#ffd23f;color:#222}
+button{pointer-events:auto;cursor:pointer;border:0;border-radius:12px;padding:10px 12px;font-weight:700;font-size:13px;background:#ffd23f;color:#222;user-select:none;-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;-webkit-touch-callout:none;touch-action:none}
 button:active{transform:scale(.96)}
-#controls{bottom:12px;left:10px;right:10px;display:flex;justify-content:space-between;align-items:flex-end;gap:8px}
+#controls{bottom:12px;left:10px;right:10px;display:flex;justify-content:space-between;align-items:flex-end;gap:8px;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
 #joy{pointer-events:auto;width:110px;height:110px;border-radius:50%;background:rgba(0,0,0,.35);border:2px solid rgba(255,255,255,.4);position:relative;touch-action:none}
 #knob{position:absolute;left:50%;top:50%;width:48px;height:48px;margin:-24px;border-radius:50%;background:#ffd23f;box-shadow:0 2px 8px #000}
 #btns{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;max-width:62vw}
 #btns button{background:rgba(20,30,20,.85);color:#fff;border:1px solid rgba(255,255,255,.35)}
-#shakebtn{background:#d21f2e!important;color:#fff!important;padding:14px 16px}
+#shakebtn{background:#d21f2e!important;color:#fff!important;padding:14px 16px;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:none}
 #levers{top:130px;right:10px;display:flex;gap:10px}
 .lever{text-align:center;font-size:11px}
 .lever .stick{width:8px;height:52px;background:#ddd;margin:4px auto 2px;border-radius:4px;transform-origin:bottom center;transition:transform .25s}
@@ -701,7 +701,7 @@ var tankGroup=makeTank(); tankGroup.position.set(1.55,1.15,-0.6); machine.add(ta
 var tankFillMesh=tankGroup.userData.fill;
 var tankWater=tankGroup.userData.water;
 function syncTankVisual(){
-  var f=M.tankFill/M.tankCap;
+  var f=Math.min(1,M.tankFill/M.tankCap);
   var h=f*1.1;
   tankFillMesh.visible=f>0.01;
   tankFillMesh.scale.y=Math.max(0.001,h/0.10);
@@ -853,7 +853,7 @@ function setMsg(s){ $('msg').textContent=s; msgTimer=4; }
 function setStep(s){ $('steps').textContent=s; }
 function updateHUD(){
   $('viewtxt').textContent=(viewMode==='third'?'Third-person (V)':'First-person cab (V)');
-  $('tankbar').style.width=(M.tankFill/M.tankCap*100)+'%';
+  $('tankbar').style.width=(Math.min(100,M.tankFill/M.tankCap*100))+'%';
   $('tanktxt').textContent=Math.floor(M.tankFill)+' / '+M.tankCap+' cherries';
   $('stat').textContent='Trees: '+stats.trees+'  •  Collected: '+stats.collected+'  •  Lost: '+stats.lost+'  •  Tanks swapped: '+stats.tanks;
   $('tankbtn').textContent=(tankState==='emptyWaiting')?'Pick Up Tank (T)':(tankState==='mounted'?'Drop Tank (T)':'Tank…');
@@ -1131,6 +1131,13 @@ var shakeBtn=$('shakebtn');
 function shakeOn(e){ e.preventDefault(); M.shaking=true; }
 function shakeOff(e){ e.preventDefault(); M.shaking=false; }
 shakeBtn.addEventListener('pointerdown',shakeOn); addEventListener('pointerup',shakeOff); shakeBtn.addEventListener('pointerleave',shakeOff);
+// No text selection / long-press menu on mobile (2026-10-26):
+// holding SHAKE used to select the button text. CSS in build.py
+// (user-select:none, touch-action:none) is the main fix; these
+// stop the context menu and selectstart as well.
+shakeBtn.addEventListener('contextmenu',function(e){ e.preventDefault(); });
+shakeBtn.addEventListener('selectstart',function(e){ e.preventDefault(); });
+document.querySelectorAll('#btns button').forEach(function(b){ b.addEventListener('contextmenu',function(e){ e.preventDefault(); }); });
 // touch joystick
 var joyEl=$('joy'), knob=$('knob');
 joyEl.addEventListener('pointerdown',function(e){ joy.active=true; joyEl.setPointerCapture(e.pointerId); joyMove(e); });
@@ -1189,27 +1196,33 @@ function updateCherries(dt){
       // and du <= UMB_OUTER (5.486 m).
       if((onStaticTarp||(M.wings>0.85&&du<=UMB_OUTER))&&p.mesh.position.y<surfY+0.15){
         p.mode='tarp'; p.t=0; p.from.copy(p.mesh.position); p.side=(loc.x<0?-1:1);
+        // Random belt journey for this cherry (2026-10-26): see note above.
+        p.beltJit=rand(-0.22,0.22); p.spd=rand(0.75,1.30); p.crossJit=rand(-0.18,0.18);
+        p.dropX=1.55+rand(-0.5,0.5); p.dropZ=-0.6+rand(-0.5,0.5);
         // Tarp slide ends on the HORIZONTAL belt, at the cherry's
         // own forward position, clamped to the belt's range
         // z 3.2–5.0. The horizontal belt then carries it back to
         // the side belt's bottom (z 3.2), then up the side belt.
         p.horizZ=clamp(loc.z,3.2,5.0);
-        p.to.copy(worldOfLocal(p.side*1.4,1.05,p.horizZ));
+        p.to.copy(worldOfLocal(p.side*1.4+p.beltJit,1.05,p.horizZ)); // beltJit target, matching the belt phases (p.to is currently unused, kept consistent)
       } else if(p.mesh.position.y<0.12){
         p.mode='ground'; p.life=0; p.mesh.position.y=0.12; stats.lost++;
       }
     } else if(p.mode==='tarp'||p.mode==='horiz'||p.mode==='side'||p.mode==='cross'||p.mode==='drop'){
       beltActive=true; p.t+=dt;
       var hz=(p.horizZ!==undefined?p.horizZ:3.2);
-      var dur=(p.mode==='tarp'?0.45:(p.mode==='horiz'?0.2+(hz-3.2)*0.2:(p.mode==='side'?0.9:(p.mode==='cross'?0.6:0.35))));
+      var spd=(p.spd!==undefined?p.spd:1);
+      var dur=(p.mode==='tarp'?0.45:(p.mode==='horiz'?0.2+(hz-3.2)*0.2:(p.mode==='side'?0.9:(p.mode==='cross'?0.6:0.35))))/spd;
       var k=clamp(p.t/dur,0,1), e=k*k*(3-2*k);
       // path is defined in machine-local space, re-evaluated each frame so the belt moves with the machine
       var a,b, sx=p.side||1;
-      if(p.mode==='tarp'){ a=localOf(p.from); b=new THREE.Vector3(sx*1.4,1.05,hz); }
-      else if(p.mode==='horiz'){ a=new THREE.Vector3(sx*1.4,1.05,hz); b=new THREE.Vector3(sx*1.4,1.0,3.2); }
-      else if(p.mode==='side'){ a=new THREE.Vector3(sx*1.4,1.0,3.2); b=new THREE.Vector3(sx*1.4,1.95,-0.3); }
-      else if(p.mode==='cross'){ a=new THREE.Vector3(-1.4,1.95,-0.3); b=new THREE.Vector3(1.35,1.35,-0.3); }
-      else { a=new THREE.Vector3(sx*1.4,1.95,-0.3); if(sx<0) a=new THREE.Vector3(1.35,1.35,-0.3); b=new THREE.Vector3(1.55,1.85,-0.6); }
+      var bj=(p.beltJit!==undefined?p.beltJit:0), cj=(p.crossJit!==undefined?p.crossJit:0);
+      var dx=(p.dropX!==undefined?p.dropX:1.55), dz=(p.dropZ!==undefined?p.dropZ:-0.6);
+      if(p.mode==='tarp'){ a=localOf(p.from); b=new THREE.Vector3(sx*1.4+bj,1.05,hz); }
+      else if(p.mode==='horiz'){ a=new THREE.Vector3(sx*1.4+bj,1.05,hz); b=new THREE.Vector3(sx*1.4+bj,1.0,3.2); }
+      else if(p.mode==='side'){ a=new THREE.Vector3(sx*1.4+bj,1.0,3.2); b=new THREE.Vector3(sx*1.4+bj,1.95,-0.3); }
+      else if(p.mode==='cross'){ a=new THREE.Vector3(-1.4+bj,1.95,-0.3+cj); b=new THREE.Vector3(1.35,1.35,-0.3+cj); }
+      else { a=new THREE.Vector3(sx*1.4+bj,1.95,-0.3); if(sx<0) a=new THREE.Vector3(1.35,1.35,-0.3+cj); b=new THREE.Vector3(dx,1.85,dz); }
       var lp=new THREE.Vector3(lerp(a.x,b.x,e),lerp(a.y,b.y,e),lerp(a.z,b.z,e));
       p.mesh.position.copy(worldOfLocal(lp.x,lp.y,lp.z));
       if(k>=1){
@@ -1217,9 +1230,20 @@ function updateCherries(dt){
         else if(p.mode==='horiz') p.mode='side';
         else if(p.mode==='side') p.mode=(sx<0?'cross':'drop');
         else if(p.mode==='cross') p.mode='drop';
-        else { p.mode='idle'; p.mesh.visible=false; M.tankFill++; stats.collected++; syncTankVisual(); }
+        else {
+          if(tankState==='mounted'&&M.tankFill<M.tankCap){ p.mode='idle'; p.mesh.visible=false; M.tankFill++; stats.collected++; syncTankVisual(); }
+          else {
+            // Spill: tank full, or no tank mounted to receive it.
+            p.mode='spill'; p.t=0; p.life=0; stats.lost++;
+            var sdx=p.mesh.position.x-M.pos.x, sdz=p.mesh.position.z-M.pos.z, sdl=Math.hypot(sdx,sdz)||1;
+            p.vel.set(sdx/sdl*rand(0.8,1.8),rand(0.5,1.5),sdz/sdl*rand(0.8,1.8));
+          }
+        }
         p.t=0; p.from.copy(p.mesh.position);
       }
+    } else if(p.mode==='spill'){
+      p.vel.y-=9.8*dt; p.mesh.position.addScaledVector(p.vel,dt);
+      if(p.mesh.position.y<0.12){ p.mode='ground'; p.life=0; p.mesh.position.y=0.12; p.mesh.scale.setScalar(1); }
     } else if(p.mode==='ground'){
       p.life+=dt; p.mesh.scale.setScalar(Math.max(0.2,1-p.life/4));
       if(p.life>4){ p.mode='idle'; p.mesh.visible=false; p.mesh.scale.setScalar(1); }
