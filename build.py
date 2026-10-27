@@ -56,7 +56,7 @@ button:active{transform:scale(.96)}
 </div></div>
 <div id="help" class="show"><div class="card">
 <h2>🍒 Cherry Shaker Simulator</h2>
-<p><b>The job:</b> Drive to a tree, line the clamp up on the trunk, put the tarps around it, clamp, and shake. Cherries fall onto the tarps and conveyors and into the tank. When the tank is full (520), drop it — the tractor brings an empty one to back up to.</p>
+<p><b>The job:</b> Drive to a tree, line the clamp up on the trunk, put the tarps around it, clamp, and shake. Cherries fall onto the tarps and conveyors and into the tank. When the tank is full (520), drop it straight down — the tractor brings an empty one to line your left mount up over. When the tarps are fully out, the fabric is solid — stow them before driving on.</p>
 <p><b>Ranked:</b> one row — two lines of trees with an aisle down the middle, 8 trees per line (16 total), 130 cherries per tree. Timer starts when you start ranked and stops when every cherry is off every tree. Final time = elapsed + 0.5s per spilled cherry. Add your 3 initials at the end.</p>
 <ul>
 <li><b>Drive</b> — <code>W/S</code>, <code>A/D</code>, or the on-screen joystick</li>
@@ -64,7 +64,7 @@ button:active{transform:scale(.96)}
 <li><b>Tarps</b> — <code>E</code>, or the tarps lever in first-person (down = out around the tree, up = back)</li>
 <li><b>Clamp</b> — <code>G</code>, or the 2D joystick (lower-right = engage, upper-right = release)</li>
 <li><b>Shake</b> — hold <code>Space</code> / HOLD TO SHAKE, or the 2D joystick lower-left (straight down = engage + shake)</li>
-<li><b>Tank</b> — <code>T</code>, or the tank lever in first-person (down = drop, up = pick up)</li>
+<li><b>Tank</b> — <code>T</code>, or the tank lever in first-person (down = drop straight down, up = pick up any tank you're lined up over, within 1.2 m)</li>
 <li><b>View</b> — <code>V</code>; drag the view to orbit / look around, double-click / double-tap to reset</li>
 <li><b>Steering wheel</b> — in first-person, drag around the wheel (clockwise = steer right)</li>
 </ul>

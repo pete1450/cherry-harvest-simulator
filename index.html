@@ -52,7 +52,7 @@ button:active{transform:scale(.96)}
 </div></div>
 <div id="help" class="show"><div class="card">
 <h2>🍒 Cherry Shaker Simulator</h2>
-<p><b>The job:</b> Drive to a tree, line the clamp up on the trunk, put the tarps around it, clamp, and shake. Cherries fall onto the tarps and conveyors and into the tank. When the tank is full (520), drop it — the tractor brings an empty one to back up to.</p>
+<p><b>The job:</b> Drive to a tree, line the clamp up on the trunk, put the tarps around it, clamp, and shake. Cherries fall onto the tarps and conveyors and into the tank. When the tank is full (520), drop it straight down — the tractor brings an empty one to line your left mount up over. When the tarps are fully out, the fabric is solid — stow them before driving on.</p>
 <p><b>Ranked:</b> one row — two lines of trees with an aisle down the middle, 8 trees per line (16 total), 130 cherries per tree. Timer starts when you start ranked and stops when every cherry is off every tree. Final time = elapsed + 0.5s per spilled cherry. Add your 3 initials at the end.</p>
 <ul>
 <li><b>Drive</b> — <code>W/S</code>, <code>A/D</code>, or the on-screen joystick</li>
@@ -60,7 +60,7 @@ button:active{transform:scale(.96)}
 <li><b>Tarps</b> — <code>E</code>, or the tarps lever in first-person (down = out around the tree, up = back)</li>
 <li><b>Clamp</b> — <code>G</code>, or the 2D joystick (lower-right = engage, upper-right = release)</li>
 <li><b>Shake</b> — hold <code>Space</code> / HOLD TO SHAKE, or the 2D joystick lower-left (straight down = engage + shake)</li>
-<li><b>Tank</b> — <code>T</code>, or the tank lever in first-person (down = drop, up = pick up)</li>
+<li><b>Tank</b> — <code>T</code>, or the tank lever in first-person (down = drop straight down, up = pick up any tank you're lined up over, within 1.2 m)</li>
 <li><b>View</b> — <code>V</code>; drag the view to orbit / look around, double-click / double-tap to reset</li>
 <li><b>Steering wheel</b> — in first-person, drag around the wheel (clockwise = steer right)</li>
 </ul>
@@ -584,7 +584,14 @@ var beltMat=new THREE.MeshLambertMaterial({map:beltTex});
   box(machine,0.08,0.35,3.8,0x888888,bx-0.4,1.55,1.45).rotation.x=0.27;
   box(machine,0.08,0.35,3.8,0x888888,bx+0.4,1.55,1.45).rotation.x=0.27;
 });
-var crossBelt=new THREE.Mesh(new THREE.BoxGeometry(2.8,0.08,0.7),beltMat);
+var crossBeltTex=(function(){
+  var c=document.createElement('canvas'); c.width=64; c.height=64;
+  var x=c.getContext('2d'); x.fillStyle='#222'; x.fillRect(0,0,64,64);
+  x.fillStyle='#444'; x.fillRect(0,0,10,64); return new THREE.CanvasTexture(c);
+})();
+crossBeltTex.wrapS=crossBeltTex.wrapT=THREE.RepeatWrapping; crossBeltTex.repeat.set(6,1);
+var crossBeltMat=new THREE.MeshLambertMaterial({map:crossBeltTex});
+var crossBelt=new THREE.Mesh(new THREE.BoxGeometry(2.8,0.08,0.7),crossBeltMat);
 crossBelt.position.set(0,1.35,-0.3); machine.add(crossBelt);
 // Horizontal extension belts, 2026-10-26: flat (not sloped) belts on
 // each side, starting at the BOTTOM of the current side belts
@@ -713,6 +720,8 @@ function makeTank(){
   });
   box(g,1.5,0.10,1.5,0x999999,0,-0.60,0);
   var fill=box(g,1.34,0.10,1.34,0xd21f2e,0,-0.55,0);
+  fill.visible=false; fill.scale.y=0.001; fill.position.y=-0.60;
+  g.userData.savedFill=0;
   var water=box(g,1.34,0.05,1.34,0x3a7bd5,0,-0.55,0);
   water.material.transparent=true; water.material.opacity=0; water.visible=false;
   g.userData.fill=fill; g.userData.water=water;
@@ -765,7 +774,7 @@ function makeTractor(){
   return {group:g,tank:tk};
 }
 npc.obj=makeTractor();
-var droppedTank=null, emptyTank=null, fullTanks=[];
+var droppedTank=null, emptyTank=null, fullTanks=[], pickingTank=null;
 var tankState='mounted'; // mounted, dropping, dropped, npcComing, npcDropping, npcLeaving, emptyWaiting, picking
 var npcDropSpot=new THREE.Vector3();
 // Direction the player was facing when the full tank was dropped.
@@ -777,6 +786,7 @@ function makeEmptyTank(){
   return tk;
 }
 function detachTankToWorld(){
+  tankGroup.userData.savedFill=M.tankFill;
   scene.attach(tankGroup); droppedTank=tankGroup; fullTanks.push(tankGroup); tankState='dropped';
   // Record the drop direction now, while the player is still facing
   // the way they were when they dropped it. Local +Z is forward,
@@ -854,7 +864,7 @@ function npcUpdate(dt){
     if(k>=1){
       scene.attach(o.tank); emptyTank=o.tank; tankState='emptyWaiting';
       npc.phase='leaving'; npc.carried=null;
-      setMsg('Empty tank dropped IN FRONT of the full tank. Back up to it — get your left mount within about a metre — and press Pick Up (T).');
+      setMsg('Empty tank dropped IN FRONT of the full tank. Line your left mount up over it — within about 1.2 m — and press Pick Up (T).');
     }
     o.group.position.copy(npc.pos); o.group.rotation.y=npc.heading; return;
   }
@@ -865,8 +875,50 @@ function npcUpdate(dt){
   var diff=((desired-npc.heading+Math.PI*3)%(Math.PI*2))-Math.PI;
   npc.heading+=clamp(diff,-1.6*dt,1.6*dt);
   npc.speed=Math.min(4.5,npc.speed+3*dt);
-  npc.pos.x+=Math.sin(npc.heading)*npc.speed*dt;
-  npc.pos.z+=Math.cos(npc.heading)*npc.speed*dt;
+  // Tractor must not drive through the shaker either: if the next
+  // step would overlap the machine chassis (or its mounted tank),
+  // pause this frame. The player can drive clear, and the tractor
+  // resumes. This does not apply to trees — the tractor's path is
+  // precomputed, and stopping for a tree could deadlock a swap.
+  var candSpeed=npc.speed;
+  var candX=npc.pos.x+Math.sin(npc.heading)*candSpeed*dt;
+  var candZ=npc.pos.z+Math.cos(npc.heading)*candSpeed*dt;
+  var tractorWouldHit=false;
+  try{
+    var tCentre={x:candX+Math.sin(npc.heading)*(-1.2), z:candZ+Math.cos(npc.heading)*(-1.2)};
+    var tCorners=obbCorners(tCentre.x,tCentre.z,0.85,2.5,npc.heading);
+    var tAxes=obbAxes(npc.heading);
+    var mChassis=obbCorners(M.pos.x,M.pos.z,1.2,3.8,M.heading);
+    if(obbPush(mChassis,{x:M.pos.x,z:M.pos.z},tCorners,tCentre,tAxes.concat(obbAxes(M.heading)))) tractorWouldHit=true;
+    if(!tractorWouldHit&&tankState==='mounted'){
+      var mtc=machineXZ(1.55,-0.6);
+      var mTank=obbCorners(mtc.x,mtc.z,0.75,0.75,M.heading);
+      if(obbPush(mTank,mtc,tCorners,tCentre,tAxes.concat(obbAxes(M.heading)))) tractorWouldHit=true;
+    }
+  }catch(e){ tractorWouldHit=false; }
+  // Fabric, fully deployed only: if the tractor's next step
+  // would put any of its corners into the fabric ring at a
+  // height the fabric actually reaches (cab top ~2.0 m), pause
+  // and tell the player to stow. Stowing works at any distance,
+  // even while clamped, so this cannot deadlock a swap — it
+  // just waits for E / tarps lever up.
+  if(!tractorWouldHit&&M.wings>=0.999){
+    try{
+      var fcCentre={x:candX+Math.sin(npc.heading)*(-1.2), z:candZ+Math.cos(npc.heading)*(-1.2)};
+      var fcCorners=obbCorners(fcCentre.x,fcCentre.z,0.85,2.5,npc.heading);
+      for(var fci=0; fci<fcCorners.length; fci++){
+        if(fabricPointHits(fcCorners[fci].x,fcCorners[fci].z,2.0)){ tractorWouldHit=true; break; }
+      }
+      if(tractorWouldHit) setMsg('Tractor waiting — stow the tarps (E) so it can get through.');
+    }catch(e){}
+  }
+  if(tractorWouldHit){
+    npc.speed=0;
+    o.group.position.copy(npc.pos); o.group.rotation.y=npc.heading;
+    return;
+  }
+  npc.pos.x=candX;
+  npc.pos.z=candZ;
   o.group.position.copy(npc.pos); o.group.rotation.y=npc.heading;
 }
 
@@ -883,7 +935,7 @@ function updateHUD(){
   $('tankbar').style.width=(Math.min(100,M.tankFill/M.tankCap*100))+'%';
   $('tanktxt').textContent=Math.floor(M.tankFill)+' / '+M.tankCap+' cherries';
   $('stat').textContent='Trees: '+stats.trees+'  •  Collected: '+stats.collected+'  •  Lost: '+stats.lost+'  •  Tanks swapped: '+stats.tanks;
-  $('tankbtn').textContent=(tankState==='emptyWaiting')?'Pick Up Tank (T)':(tankState==='mounted'?'Drop Tank (T)':'Tank…');
+  $('tankbtn').textContent=(tankState==='picking'||tankState==='dropping')?'Tank…':(tankState==='mounted'?'Drop Tank (T)':'Pick Up Tank (T)');
   // levers
   $('levWing').style.transform='rotate('+(M.wingsOpen? -38:38)+'deg)';
   $('levGrip').style.transform='rotate('+(M.gripped? -38:38)+'deg)';
@@ -1029,20 +1081,34 @@ function toggleGrip(){
 }
 function tankAction(){
   if(tankState==='mounted'){
-    // No activation gate, 2026-10-26: drop anytime, even while
-    // clamped or moving. See comment above for pickup distance.
-    tankState='dropping'; M.dropT=0; setMsg('Lowering tank… drive forward when it is on the ground.');
-  } else if(tankState==='emptyWaiting'){
+    // Drop STRAIGHT DOWN from the mount slot, 2026-10-27: no more
+    // sideways slide to x 2.9. The tank just lowers in place, so
+    // picking it back up is lining the mount up over it again.
+    tankState='dropping'; M.dropT=0; setMsg('Lowering tank straight down…');
+  } else if(tankState==='picking'||tankState==='dropping'){
+    setMsg('Tank job in progress…');
+  } else {
+    // Not mounted: try to pick up ANY tank on the ground — full,
+    // partial, or empty — if the left mount is lined up over it.
+    // Grace: mount point within 1.2 m of the tank centre, so it
+    // does not have to be exact, but it does have to be lined up.
     var mount=worldOfLocal(1.55,0,-0.6);
-    var md=emptyTank?Math.hypot(mount.x-emptyTank.position.x,mount.z-emptyTank.position.z):99;
-    if(emptyTank&&md<1.8){
-      tankState='picking'; M.pickT=0; setMsg('Picking up the empty tank onto the left flank…');
+    var candidates=fullTanks.slice();
+    if(emptyTank) candidates.push(emptyTank);
+    var best=null, bestD=99;
+    candidates.forEach(function(tk){
+      var d=Math.hypot(mount.x-tk.position.x,mount.z-tk.position.z);
+      if(d<bestD){ bestD=d; best=tk; }
+    });
+    if(best&&bestD<1.2){
+      pickingTank=best; tankState='picking'; M.pickT=0;
+      setMsg('Picking up tank onto the left flank…');
+    } else if(candidates.length){
+      setMsg('Line up so your left mount is over a tank — within about 1.2 m — then press T again. Or drive forward at least 6 m for the tractor swap.');
     } else {
-      setMsg('Back up to the empty tank — get your left mount within about a metre of it, then press T again.');
+      setMsg('No tank on the ground in range. Drop a tank first, or wait for the tractor.');
     }
-  } else if(tankState==='dropped'){
-    setMsg('Drive forward at least 6 m — the tractor needs room to come from behind and around the dropped tank.');
-  } else { setMsg('Tank job in progress…'); }
+  }
 }
 function detachCherries(tree,count){
   var alive=tree.cherries.filter(function(c){return c.alive;});
@@ -1182,7 +1248,7 @@ function camDragEnd(){
     var cd=controlDrag;
     if(cd.control==='tank'){
       // up on screen (+angle) = tank up = pick up; down on screen (-angle) = tank down = drop
-      if(tankLeverAngle>0.25&&tankState==='emptyWaiting') tankAction();
+      if(tankLeverAngle>0.25&&tankState!=='mounted'&&tankState!=='picking'&&tankState!=='dropping') tankAction();
       else if(tankLeverAngle<-0.25&&tankState==='mounted') tankAction();
     } else if(cd.control==='tarps'){
       // FLIPPED 2026-10-26: down on screen (-angle) = deploy out
@@ -1368,18 +1434,257 @@ function updateCherries(dt){
       if(p.life>4){ p.mode='idle'; p.mesh.visible=false; p.mesh.scale.setScalar(1); }
     }
   });
-  if(beltActive||M.shaking) beltTex.offset.y-=dt*2.5;
+  if(beltActive||M.shaking){ beltTex.offset.y-=dt*2.5; crossBeltTex.offset.x-=dt*2.5; }
+}
+function machineXZ(lx,lz){
+  var c=Math.cos(M.heading), s=Math.sin(M.heading);
+  return {x:M.pos.x+lx*c+lz*s, z:M.pos.z+lx*(-s)+lz*c};
+}
+function obbCorners(cx,cz,hx,hz,heading){
+  var c=Math.cos(heading), s=Math.sin(heading), out=[];
+  var pts=[[-hx,-hz],[hx,-hz],[hx,hz],[-hx,hz]];
+  for(var i=0;i<pts.length;i++){
+    var lx=pts[i][0], lz=pts[i][1];
+    out.push({x:cx+lx*c+lz*s, z:cz+lx*(-s)+lz*c});
+  }
+  return out;
+}
+function obbAxes(heading){
+  var c=Math.cos(heading), s=Math.sin(heading);
+  return [{x:c,z:-s},{x:s,z:c}];
+}
+function projRange(corners,axis){
+  var mn=1e9, mx=-1e9;
+  for(var i=0;i<corners.length;i++){
+    var d=corners[i].x*axis.x+corners[i].z*axis.z;
+    if(d<mn) mn=d;
+    if(d>mx) mx=d;
+  }
+  return {min:mn,max:mx};
+}
+function obbPush(mCorners,mCentre,oCorners,oCentre,axes){
+  var bestDepth=1e9, bestAxis=null;
+  for(var i=0;i<axes.length;i++){
+    var ax=axes[i];
+    var pa=projRange(mCorners,ax), pb=projRange(oCorners,ax);
+    var ov=Math.min(pa.max,pb.max)-Math.max(pa.min,pb.min);
+    if(ov<=0) return null;
+    if(ov<bestDepth){ bestDepth=ov; bestAxis=ax; }
+  }
+  var dx=mCentre.x-oCentre.x, dz=mCentre.z-oCentre.z;
+  var sign=(dx*bestAxis.x+dz*bestAxis.z)>=0?1:-1;
+  return {x:bestAxis.x*sign*bestDepth, z:bestAxis.z*sign*bestDepth};
+}
+function hubPushOut(hub,oCentre,oHx,oHz,oHeading,pad){
+  var c=Math.cos(oHeading), s=Math.sin(oHeading);
+  var dx=hub.x-oCentre.x, dz=hub.z-oCentre.z;
+  var lx=dx*c-dz*s, lz=dx*s+dz*c;
+  var hx=oHx+pad, hz=oHz+pad;
+  if(Math.abs(lx)>=hx||Math.abs(lz)>=hz) return null;
+  var penX=hx-Math.abs(lx), penZ=hz-Math.abs(lz);
+  if(penX<penZ){
+    var signX=lx>=0?1:-1;
+    return {x:c*signX*penX, z:(-s)*signX*penX};
+  } else {
+    var signZ=lz>=0?1:-1;
+    return {x:s*signZ*penZ, z:c*signZ*penZ};
+  }
+}
+function fabricPointHits(wx,wz,topY){
+  // True if a world point at height up to topY would hit the
+  // fully deployed fabric. Only when M.wings is 1, i.e. the
+  // umbrella is fully out (largest). Shape: annulus around the
+  // hub, inner 1.4 m, outer 5.486 m, 60 deg machine-side gap
+  // (240-300 deg, machine-local) excluded. Height-aware: fabric
+  // height is umbFabricY at that radius/angle, so a tank top at
+  // 1.3 m or a fence at 0.9 m, both below the fabric, do not hit
+  // it, while a trunk (0-2.7 m) or a tractor cab (top ~2.0 m)
+  // can, depending on radius.
+  if(M.wings<0.999) return false;
+  var hub=machineXZ(0,5.0);
+  var dx=wx-hub.x, dz=wz-hub.z;
+  var c=Math.cos(M.heading), s=Math.sin(M.heading);
+  var lx=dx*c-dz*s, lz=dx*s+dz*c;
+  var du=Math.hypot(lx,lz);
+  if(du<UMB_INNER||du>UMB_OUTER) return false;
+  var aDeg=((Math.atan2(lz,lx)*180/Math.PI)+360)%360;
+  if(aDeg>=240&&aDeg<=300) return false;
+  var fy=umbFabricY(du,Math.atan2(lz,lx));
+  if(fy>topY) return false;
+  return true;
 }
 function collide(pos){
-  // trees
-  trees.forEach(function(t){
-    var dx=pos.x-t.x, dz=pos.z-t.z, d=Math.hypot(dx,dz);
-    if(d<1.3&&d>0.01){ pos.x=t.x+dx/d*1.3; pos.z=t.z+dz/d*1.3; }
-  });
-  fullTanks.forEach(function(ft){ var dx=pos.x-ft.position.x, dz=pos.z-ft.position.z, d=Math.hypot(dx,dz); if(d<1.8&&d>0.01){ pos.x=ft.position.x+dx/d*1.8; pos.z=ft.position.z+dz/d*1.8; } });
-  if(emptyTank){ var dx=pos.x-emptyTank.position.x, dz=pos.z-emptyTank.position.z, d=Math.hypot(dx,dz); if(d<1.6&&d>0.01&&tankState!=='picking'){ pos.x=emptyTank.position.x+dx/d*1.6; pos.z=emptyTank.position.z+dz/d*1.6; } }
-  pos.x=clamp(pos.x,-43,43); pos.z=clamp(pos.z,-30,30); // z expanded 2026-10-26 from ±23 to ±30, so outer rows at ±24 can be approached from both sides (24+5=29, -24-5=-29, both inside the clamp, and inside the fence at ±34)
+  // Hard collision, 2026-10-27. Replaces the old centre-only push
+  // (trees 1.3 m, tanks 1.8 / 1.6 m), which let the long chassis,
+  // the boom, and the flank tank pass straight through things.
+  // Solid machine parts, in XZ:
+  //   chassis: centre (0,0), half (1.2, 3.8)
+  //   mounted tank: centre (1.55,-0.6), half (0.75, 0.75)
+  // The boom is NOT a solid OBB, because the clamp must reach a
+  // trunk to grip it. Instead the hub is a small point (pad 0.1)
+  // that cannot pass through a trunk, a tank, the tractor, or
+  // the fence. Hub to trunk face is 0.35 m, still inside the
+  // <0.60 m alignment window, so clamping still works, but the
+  // boom cannot drive straight through a tree.
+  // The umbrella fabric is solid ONLY when fully deployed,
+  // 2026-10-27 (see fabric section at the end of collide()).
+  // Stowed or unfolding, it is not solid at all.
+  // Tanks get a mount exemption: if the left mount is within
+  // 1.2 m of a tank centre, that tank does not push the machine
+  // away — that is the pickup alignment, and the tank is under
+  // the flank, not under the chassis centre.
+  var headOn=false;
+  for(var iter=0; iter<3; iter++){
+    var mOBBs=[];
+    mOBBs.push({cx:pos.x, cz:pos.z, hx:1.2, hz:3.8, heading:M.heading});
+    if(tankState==='mounted'){
+      var tc=machineXZ(1.55,-0.6);
+      mOBBs.push({cx:tc.x, cz:tc.z, hx:0.75, hz:0.75, heading:M.heading});
+    }
+    function testMachineVsObstacle(oCentre,oHx,oHz,oHeading){
+      for(var mi=0; mi<mOBBs.length; mi++){
+        var m=mOBBs[mi];
+        var mCorners=obbCorners(m.cx,m.cz,m.hx,m.hz,m.heading);
+        var oCorners=obbCorners(oCentre.x,oCentre.z,oHx,oHz,oHeading);
+        var axes=obbAxes(m.heading).concat(obbAxes(oHeading));
+        var push=obbPush(mCorners,{x:m.cx,z:m.cz},oCorners,oCentre,axes);
+        if(push){
+          pos.x+=push.x; pos.z+=push.z;
+          var fx=Math.sin(M.heading), fz=Math.cos(M.heading);
+          if(push.x*fx+push.z*fz<0) headOn=true;
+          return true;
+        }
+      }
+      return false;
+    }
+    var mount=machineXZ(1.55,-0.6);
+    function tankIsMountAligned(tk){
+      return Math.hypot(mount.x-tk.position.x,mount.z-tk.position.z)<1.2;
+    }
+    var pushed=false;
+    for(var ti=0; ti<trees.length; ti++){
+      if(testMachineVsObstacle({x:trees[ti].x,z:trees[ti].z},0.4,0.4,0)){ pushed=true; break; }
+    }
+    if(pushed) continue;
+    if(testMachineVsObstacle({x:0,z:34},46,0.2,0)) continue;
+    if(testMachineVsObstacle({x:0,z:-34},46,0.2,0)) continue;
+    var tankPushed=false;
+    for(var fi=0; fi<fullTanks.length; fi++){
+      var ft=fullTanks[fi];
+      if(tankIsMountAligned(ft)) continue;
+      if(testMachineVsObstacle({x:ft.position.x,z:ft.position.z},0.75,0.75,ft.rotation.y||0)){ tankPushed=true; break; }
+    }
+    if(tankPushed) continue;
+    if(emptyTank&&tankState!=='picking'&&!tankIsMountAligned(emptyTank)){
+      if(testMachineVsObstacle({x:emptyTank.position.x,z:emptyTank.position.z},0.75,0.75,emptyTank.rotation.y||0)) continue;
+    }
+    if(npc.phase!=='idle'&&npc.obj.group.visible){
+      var tfwdX=Math.sin(npc.heading), tfwdZ=Math.cos(npc.heading);
+      var tcx=npc.pos.x+tfwdX*(-1.2), tcz=npc.pos.z+tfwdZ*(-1.2);
+      if(testMachineVsObstacle({x:tcx,z:tcz},0.85,2.5,npc.heading)) continue;
+    }
+    var hub=machineXZ(0,5.0);
+    if(hub.z>33.9){ pos.z-=hub.z-33.9; continue; }
+    if(hub.z<-33.9){ pos.z-=hub.z+33.9; continue; }
+    var hubPushed=false;
+    for(var hi=0; hi<trees.length; hi++){
+      if(M.gripped&&grippedTree===trees[hi]) continue;
+      var hp=hubPushOut(hub,{x:trees[hi].x,z:trees[hi].z},0.25,0.25,0,0.1);
+      if(hp){ pos.x+=hp.x; pos.z+=hp.z; hubPushed=true; break; }
+    }
+    if(hubPushed) continue;
+    for(var hj=0; hj<fullTanks.length; hj++){
+      var ft2=fullTanks[hj];
+      if(tankIsMountAligned(ft2)) continue;
+      var hp2=hubPushOut(hub,{x:ft2.position.x,z:ft2.position.z},0.75,0.75,ft2.rotation.y||0,0.1);
+      if(hp2){ pos.x+=hp2.x; pos.z+=hp2.z; hubPushed=true; break; }
+    }
+    if(hubPushed) continue;
+    if(emptyTank&&tankState!=='picking'&&!tankIsMountAligned(emptyTank)){
+      var hp3=hubPushOut(hub,{x:emptyTank.position.x,z:emptyTank.position.z},0.75,0.75,emptyTank.rotation.y||0,0.1);
+      if(hp3){ pos.x+=hp3.x; pos.z+=hp3.z; continue; }
+    }
+    if(npc.phase!=='idle'&&npc.obj.group.visible){
+      var tf2x=Math.sin(npc.heading), tf2z=Math.cos(npc.heading);
+      var tc2x=npc.pos.x+tf2x*(-1.2), tc2z=npc.pos.z+tf2z*(-1.2);
+      var hp4=hubPushOut(hub,{x:tc2x,z:tc2z},0.85,2.5,npc.heading,0.1);
+      if(hp4){ pos.x+=hp4.x; pos.z+=hp4.z; continue; }
+    }
+    // --- umbrella fabric, solid ONLY when fully deployed ---
+    // Gate: M.wings must be 1, not just wingsOpen (which flips
+    // true the moment you press E, before the 4 s unfold).
+    // Skipped while gripped, so a clamped machine is never
+    // shoved off its tree by its own fabric. The clamped tree
+    // itself is in the inner hole (du ~0), so it would not hit
+    // anyway; neighbouring trunks are 8 m+ away, outside the
+    // 5.486 m outer radius, so a correctly deployed umbrella
+    // around a tree hits nothing at deployment.
+    // Push rule for a trunk inside the ring: exit via the
+    // nearest edge — inward to the inner hole if it is closer,
+    // outward past the outer rim if that is closer. That is
+    // why driving away with the tarps out is blocked: the
+    // trunk you just shook moves from the hole into the ring,
+    // and the nearest exit is back into the hole, so you must
+    // stow before driving on.
+    // Tanks and fences are NOT tested here: their tops are
+    // below the fabric (tank 1.3 m, fence ~0.9 m, fabric
+    // 1.43-2.40 m), so they pass under it. Trunks and the
+    // tractor cab are tested, with the fabric height check.
+    if(M.wings>=0.999&&!M.gripped){
+      var fHub=machineXZ(0,5.0);
+      var fc=Math.cos(M.heading), fs=Math.sin(M.heading);
+      var fabricPushed=false;
+      for(var fti=0; fti<trees.length; fti++){
+        var tr=trees[fti];
+        var fdx=tr.x-fHub.x, fdz=tr.z-fHub.z;
+        var flx=fdx*fc-fdz*fs, flz=fdx*fs+fdz*fc;
+        var fdu=Math.hypot(flx,flz);
+        if(fdu<UMB_INNER-0.4||fdu>UMB_OUTER+0.4) continue;
+        var faDeg=((Math.atan2(flz,flx)*180/Math.PI)+360)%360;
+        if(faDeg>=240&&faDeg<=300) continue;
+        if(fdu<0.01) continue;
+        var innerPen=fdu-(UMB_INNER-0.4), outerPen=(UMB_OUTER+0.4)-fdu;
+        var fMag, fDirX, fDirZ;
+        if(innerPen<outerPen){
+          fMag=innerPen; fDirX=(tr.x-fHub.x)/fdu; fDirZ=(tr.z-fHub.z)/fdu;
+        } else {
+          fMag=outerPen; fDirX=(fHub.x-tr.x)/fdu; fDirZ=(fHub.z-tr.z)/fdu;
+        }
+        pos.x+=fDirX*fMag; pos.z+=fDirZ*fMag;
+        fabricPushed=true; break;
+      }
+      if(fabricPushed) continue;
+      if(npc.phase!=='idle'&&npc.obj.group.visible){
+        var tf3x=Math.sin(npc.heading), tf3z=Math.cos(npc.heading);
+        var tc3x=npc.pos.x+tf3x*(-1.2), tc3z=npc.pos.z+tf3z*(-1.2);
+        var tCorners=obbCorners(tc3x,tc3z,0.85,2.5,npc.heading);
+        for(var ci=0; ci<tCorners.length; ci++){
+          if(!fabricPointHits(tCorners[ci].x,tCorners[ci].z,2.0)) continue;
+          var cdx=tCorners[ci].x-fHub.x, cdz=tCorners[ci].z-fHub.z;
+          var clx=cdx*fc-cdz*fs, clz=cdx*fs+cdz*fc;
+          var cdu=Math.hypot(clx,clz);
+          if(cdu<0.01) continue;
+          var caDeg=((Math.atan2(clz,clx)*180/Math.PI)+360)%360;
+          if(caDeg>=240&&caDeg<=300) continue;
+          var cInner=cdu-UMB_INNER, cOuter=UMB_OUTER-cdu;
+          var cMag, cDirX, cDirZ;
+          if(cInner<cOuter){
+            cMag=cInner; cDirX=(tCorners[ci].x-fHub.x)/cdu; cDirZ=(tCorners[ci].z-fHub.z)/cdu;
+          } else {
+            cMag=cOuter; cDirX=(fHub.x-tCorners[ci].x)/cdu; cDirZ=(fHub.z-tCorners[ci].z)/cdu;
+          }
+          pos.x+=cDirX*cMag; pos.z+=cDirZ*cMag;
+          fabricPushed=true; break;
+        }
+        if(fabricPushed) continue;
+      }
+    }
+    break;
+  }
+  if(headOn) M.speed=0;
+  pos.x=clamp(pos.x,-43,43); pos.z=clamp(pos.z,-30,30);
 }
+
 function animate(){
   requestAnimationFrame(animate);
   var dt=Math.min(0.05,clock.getDelta());
@@ -1458,7 +1763,7 @@ function animate(){
   // --- tank drop / pick animations ---
   if(tankState==='dropping'){
     M.dropT+=dt; var kd=clamp(M.dropT/1.2,0,1);
-    tankGroup.position.set(lerp(1.55,2.9,kd),lerp(1.15,0.65,kd),-0.6);
+    tankGroup.position.set(1.55,lerp(1.15,0.65,kd),-0.6);
     if(kd>=1) detachTankToWorld();
     else { /* tankGroup still child of machine while lowering */ }
   }
@@ -1468,20 +1773,32 @@ function animate(){
   }
   if(tankState==='picking'){
     M.pickT+=dt; var kp=clamp(M.pickT/1.1,0,1);
-    if(emptyTank){
-      // move empty tank from world toward the mounted slot, then reparent
+    if(pickingTank){
+      // move the picked tank from world toward the mounted slot, then reparent
       var slot=worldOfLocal(1.55,1.15,-0.6);
-      emptyTank.position.lerp(slot,kp*0.25+0.05);
+      pickingTank.position.lerp(slot,kp*0.25+0.05);
       if(kp>=1){
-        machine.add(emptyTank); emptyTank.position.set(1.55,1.15,-0.6); emptyTank.rotation.set(0,0,0);
-        tankGroup=emptyTank; emptyTank=null;
+        var fi=fullTanks.indexOf(pickingTank); if(fi>=0) fullTanks.splice(fi,1);
+        if(emptyTank===pickingTank) emptyTank=null;
+        if(droppedTank===pickingTank) droppedTank=null;
+        // If the tractor was still coming for this dropped tank,
+        // cancel it — the swap is no longer needed. If it already
+        // dropped an empty tank and is leaving, leave it alone.
+        if(npc.phase==='approach'||npc.phase==='dropping'){
+          npc.phase='idle'; npc.obj.group.visible=false; npc.carried=null;
+        }
+        machine.add(pickingTank); pickingTank.position.set(1.55,1.15,-0.6); pickingTank.rotation.set(0,0,0);
+        tankGroup=pickingTank; pickingTank=null;
         tankFillMesh=tankGroup.userData.fill; tankWater=tankGroup.userData.water;
-        M.tankFill=0; stats.tanks++; tankState='mounted'; syncTankVisual();
-        setMsg('Empty tank on board. Back to shaking!');
+        M.tankFill=tankGroup.userData.savedFill||0;
+        if(M.tankFill===0) stats.tanks++;
+        tankState='mounted'; syncTankVisual();
+        setMsg('Tank on board. Back to shaking!');
         blip(760);
       }
     }
   }
+
   npcUpdate(dt);
   updateCherries(dt);
   checkRankedFinish();
