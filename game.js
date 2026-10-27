@@ -72,7 +72,16 @@ box(scene,92,0.18,0.18,0x6b4a2a,0,0.9,-34); box(scene,92,0.18,0.18,0x6b4a2a,0,0.
 // already at z -18,-6,6,18 are exactly halfway between the new
 // rows (-24/-12, -12/0, 0/12, 12/24), so no aisle change was
 // needed — you drive in an aisle and line up on the row beside it.
-var ROW_Z=[-24,-12,0,12,24], TREE_X=[-28,-20,-12,-4,4,12,20,28];
+// Ranked mode, 2026-10-26, CORRECTED same day: ?ranked=1 => one
+// driving row, meaning TWO tree lines at z -6 and +6 with the
+// player driving down the middle aisle at z 0. That is the normal
+// 12 m row spacing, so the aisle is 6 m from each line, exactly
+// like a casual aisle. 8 trees per line = 16 trees.
+// Casual stays 5 rows x 8 = 40 trees. Ranked is chosen on the
+// start screen, which reloads with / without ?ranked=1, so the
+// orchard is built correctly from the start — no mid-game rebuild.
+var IS_RANKED=(typeof location!=='undefined'&&location.search.indexOf('ranked=1')>=0);
+var ROW_Z=IS_RANKED?[-6,6]:[-24,-12,0,12,24], TREE_X=[-28,-20,-12,-4,4,12,20,28];
 var trees=[], treeGroupById={};
 var leafCols=[0x2e7d2e,0x3a8f35,0x2a6b28,0x4aa344,0x357f2f];
 var cherryCols=[0xd21f2e,0xe8323f,0xb3121f,0xf04a55];
@@ -94,7 +103,9 @@ function makeTree(id,tx,tz){
   leaves.forEach(function(L,i){ dummy.position.set(L.x,L.y,L.z); dummy.rotation.set(0,0,0); dummy.scale.setScalar(1); dummy.updateMatrix(); lm.setMatrixAt(i,dummy.matrix); lm.setColorAt(i,new THREE.Color(L.c)); });
   lm.castShadow=true; g.add(lm);
   // cherries: small red voxels on the outer canopy
-  var cherries=[], nCh=118+Math.floor(Math.random()*22);
+  // Ranked: fixed 130 cherries per tree (16 trees = 2,080 total), so
+  // ranked runs are comparable — casual keeps 118-140 random.
+  var cherries=[], nCh=IS_RANKED?130:(118+Math.floor(Math.random()*22));
   for(var ci=0;ci<nCh;ci++){
     var a=Math.random()*Math.PI*2, r=1.6+Math.random()*0.9, cy=3.2+Math.random()*2.9;
     cherries.push({x:Math.cos(a)*r,y:cy,z:Math.sin(a)*r,c:pick(cherryCols),alive:true});
@@ -112,7 +123,7 @@ var tid=0; ROW_Z.forEach(function(rz){ TREE_X.forEach(function(tx){ makeTree(tid
 
 // ---------- OMC one-man shaker ----------
 var machine=new THREE.Group(); scene.add(machine);
-var M={pos:new THREE.Vector3(-36,0,-6), heading:Math.PI/2, speed:0, steer:0,
+var M={pos:new THREE.Vector3(-36,0,IS_RANKED?0:-6), heading:Math.PI/2, speed:0, steer:0,
   wings:0, wingsTarget:0, wingsOpen:false, umbTravel:0, boom:0, boomTarget:0, gripped:false,
   gripClose:0, shaking:false, shakePower:0, tankFill:0, tankCap:520};
 // chassis — rebuilt to the photo: long yellow frame, elevated operator
@@ -779,6 +790,9 @@ function setMsg(s){ $('msg').textContent=s; msgTimer=4; }
 function setStep(s){ $('steps').textContent=s; }
 function updateHUD(){
   $('viewtxt').textContent=(viewMode==='third'?'Third-person (V)':'First-person cab (V)');
+  if($('modetxt')) $('modetxt').textContent=IS_RANKED?'Ranked — 1 row':'Casual';
+  var rt=$('rankedtxt');
+  if(rt){ rt.style.display=IS_RANKED?'block':'none'; if(IS_RANKED) rt.textContent='Ranked: '+fmtRankedTime(rankedElapsed)+(rankedFinished?' — Final '+fmtRankedTime(rankedFinal):''); }
   $('tankbar').style.width=(Math.min(100,M.tankFill/M.tankCap*100))+'%';
   $('tanktxt').textContent=Math.floor(M.tankFill)+' / '+M.tankCap+' cherries';
   $('stat').textContent='Trees: '+stats.trees+'  •  Collected: '+stats.collected+'  •  Lost: '+stats.lost+'  •  Tanks swapped: '+stats.tanks;
@@ -788,6 +802,69 @@ function updateHUD(){
   $('levGrip').style.transform='rotate('+(M.gripped? -38:38)+'deg)';
   $('levShake').style.transform='rotate('+(M.shaking? -38:20)+'deg)';
   $('levTank').style.transform='rotate('+((tankState==='mounted')?20:-38)+'deg)';
+}
+// ---------- ranked mode ----------
+function fmtRankedTime(sec){
+  var tenths=Math.max(0,Math.round(sec*10));
+  var m=Math.floor(tenths/600), rem=tenths%600, s=Math.floor(rem/10), th=rem%10;
+  return m+':'+(s<10?'0':'')+s+'.'+th;
+}
+var rankedElapsed=0, rankedRunning=false, rankedFinished=false, rankedFinal=0, rankedSaved=false;
+function loadRankedScores(){
+  try{ var a=JSON.parse(localStorage.getItem('cherryRankedScores')||'[]'); return Array.isArray(a)?a:[]; }
+  catch(e){ return []; }
+}
+// Firebase global leaderboard, 2026-10-26: project cherrysimleaderboard,
+// Realtime Database, node "scores". REST only — no Firebase SDK and
+// no CDN, so the single-file game stays self-contained. REST needs
+// only the database URL, so the apiKey and other config values the
+// user pasted are deliberately NOT embedded in the game.
+var FIREBASE_DB_URL='https://cherrysimleaderboard-default-rtdb.firebaseio.com';
+function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function renderRankedBoardRows(el,a,label){
+  if(!a.length){ el.innerHTML='<p>No ranked scores yet — be the first.</p>'; return; }
+  var html='<table style="width:100%;border-collapse:collapse;font-size:14px"><tr><th style="text-align:left">#</th><th style="text-align:left">Initials</th><th style="text-align:left">Final</th><th style="text-align:left">Elapsed</th><th style="text-align:left">Spilled</th></tr>';
+  a.forEach(function(s,i){ html+='<tr><td>'+(i+1)+'</td><td>'+escHtml(s.name)+'</td><td>'+fmtRankedTime(s.final)+'</td><td>'+fmtRankedTime(s.elapsed)+'</td><td>'+s.lost+'</td></tr>'; });
+  html+='</table><p style="font-size:12px;opacity:.8">'+label+' • Lower final time wins. Final = elapsed + 0.5s per spilled cherry.</p>';
+  el.innerHTML=html;
+}
+function renderRankedBoard(el){
+  if(!el) return;
+  el.innerHTML='<p>Loading global leaderboard…</p>';
+  fetch(FIREBASE_DB_URL+'/scores.json?orderBy=%22final%22&limitToFirst=10')
+    .then(function(r){ if(!r.ok) throw new Error('Firebase '+r.status); return r.json(); })
+    .then(function(data){
+      var a=[];
+      if(data){ Object.keys(data).forEach(function(k){ var s=data[k]; if(s&&typeof s.final==='number') a.push(s); }); a.sort(function(x,y){ return x.final-y.final; }); a=a.slice(0,10); }
+      renderRankedBoardRows(el,a,'Global leaderboard');
+    })
+    .catch(function(){
+      // Offline, or the global board is unreachable: fall back to
+      // the local cache saved on this device, so the board is
+      // never just blank.
+      renderRankedBoardRows(el,loadRankedScores(),'Local scores — global board unreachable');
+    });
+}
+function showRankedFinish(){
+  rankedFinal=rankedElapsed+0.5*stats.lost;
+  $('rankedScoreLine').innerHTML='Final time: <b>'+fmtRankedTime(rankedFinal)+'</b><br>Elapsed: '+fmtRankedTime(rankedElapsed)+'<br>Spilled: '+stats.lost+' x 0.5s = '+(0.5*stats.lost).toFixed(1)+'s penalty<br>Trees: '+stats.trees+'  •  Collected: '+stats.collected+'  •  Lost: '+stats.lost;
+  $('rankedFinish').style.display='block';
+  renderRankedBoard($('rankedFinishBoard'));
+  setStep('Ranked complete — add your 3 initials.');
+}
+function checkRankedFinish(){
+  if(!IS_RANKED||!rankedRunning||rankedFinished) return;
+  if(!trees.length||!trees.every(function(t){ return t.harvested; })) return;
+  // Scoring is only complete when every tree has every cherry
+  // removed AND every detached cherry has resolved (collected,
+  // lost to the ground, or spilled from a full tank). Ground-
+  // fading cherries already counted as lost, so they do not
+  // block finishing. Without the second part, shaking the last
+  // tree with the tarps open would stop the timer before those
+  // misses counted as spilled.
+  var pending=pool.some(function(p){ return p.mode==='fall'||p.mode==='tarp'||p.mode==='horiz'||p.mode==='side'||p.mode==='cross'||p.mode==='drop'||p.mode==='spill'; });
+  if(pending) return;
+  rankedFinished=true; rankedRunning=false; showRankedFinish();
 }
 function nearestUnharvested(){
   var best=null,bd=1e9;
@@ -1052,7 +1129,36 @@ addEventListener('keyup',function(e){ keys[e.code]=false; });
 $('wingbtn').onclick=toggleWings; $('gripbtn').onclick=toggleGrip; $('tankbtn').onclick=tankAction;
 $('viewbtn').onclick=function(){ viewMode=(viewMode==='third')?'first':'third'; };
 $('helpbtn').onclick=function(){ $('help').classList.toggle('show'); };
-$('startbtn').onclick=function(){ $('help').classList.remove('show'); };
+$('startbtn').onclick=function(){ if(IS_RANKED){ location.href=location.pathname; } else { $('help').classList.remove('show'); } };
+$('rankedbtn').onclick=function(){ if(IS_RANKED){ $('help').classList.remove('show'); rankedRunning=true; } else { location.href=location.pathname+'?ranked=1'; } };
+// Ranked finish overlay: initials must be exactly 3 letters/numbers.
+if($('rankedSaveBtn')) $('rankedSaveBtn').onclick=function(){
+  var v=($('rankedInitials').value||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+  $('rankedInitials').value=v;
+  if(v.length!==3){ $('rankedSaveMsg').textContent='Enter exactly 3 letters or numbers.'; return; }
+  if(rankedSaved) return;
+  var score={name:v,final:rankedFinal,elapsed:rankedElapsed,lost:stats.lost,date:Date.now()};
+  $('rankedSaveBtn').disabled=true; $('rankedSaveBtn').textContent='Saving…'; $('rankedSaveMsg').textContent='Saving to the global leaderboard…';
+  fetch(FIREBASE_DB_URL+'/scores.json',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(score)})
+    .then(function(r){ if(!r.ok) throw new Error('Firebase '+r.status); return r.json(); })
+    .then(function(){
+      rankedSaved=true; $('rankedSaveBtn').textContent='Saved ✓'; $('rankedSaveMsg').textContent='Saved to the global leaderboard.';
+      // Local cache copy, for the offline fallback board only.
+      // The global board is the source of truth when it loads.
+      var a=loadRankedScores(); a.push(score); a.sort(function(x,y){ return x.final-y.final; }); a=a.slice(0,10);
+      try{ localStorage.setItem('cherryRankedScores',JSON.stringify(a)); }catch(e){}
+      renderRankedBoard($('rankedFinishBoard')); renderRankedBoard($('rankedBoard'));
+    })
+    .catch(function(){
+      $('rankedSaveBtn').disabled=false; $('rankedSaveBtn').textContent='Save score →';
+      $('rankedSaveMsg').textContent='Could not reach the global board — check your connection and try again. Nothing was saved, so you can retry without a duplicate.';
+    });
+};
+if($('rankedAgainBtn')) $('rankedAgainBtn').onclick=function(){ location.href=location.pathname+'?ranked=1'; };
+if($('rankedCasualBtn')) $('rankedCasualBtn').onclick=function(){ location.href=location.pathname; };
+if($('rankedInitials')) $('rankedInitials').addEventListener('input',function(){ this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,3); });
+// Render the board on the start screen, if it exists.
+renderRankedBoard($('rankedBoard'));
 var shakeBtn=$('shakebtn');
 function shakeOn(e){ e.preventDefault(); M.shaking=true; }
 function shakeOff(e){ e.preventDefault(); M.shaking=false; }
@@ -1190,6 +1296,9 @@ function collide(pos){
 function animate(){
   requestAnimationFrame(animate);
   var dt=Math.min(0.05,clock.getDelta());
+  // Ranked timer: runs only once ranked is started, and pauses
+  // while the help overlay is open.
+  if(IS_RANKED&&rankedRunning&&!rankedFinished&&!$('help').classList.contains('show')) rankedElapsed+=dt;
   // --- drive ---
   var fwdIn=0, steerIn=0;
   if(keys.KeyW||keys.ArrowUp) fwdIn+=1; if(keys.KeyS||keys.ArrowDown) fwdIn-=1;
@@ -1288,6 +1397,7 @@ function animate(){
   }
   npcUpdate(dt);
   updateCherries(dt);
+  checkRankedFinish();
   // --- target / alignment HUD ---
   targetTree=nearestUnharvested();
   trees.forEach(function(t){

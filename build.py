@@ -38,7 +38,7 @@ button:active{transform:scale(.96)}
 </style></head><body>
 <div id="game"></div>
 <div class="hud" id="top"><div class="panel"><h1>🍒 Cherry Shaker — OMC One-Man</h1><p id="stat"></p><div id="tankwrap"><div id="tankbar"></div></div><p id="tanktxt"></p></div>
-<div class="panel" style="text-align:right"><p>View: <b id="viewtxt">Third-person (V)</b></p><p>Gold ring = next tree</p></div></div>
+<div class="panel" style="text-align:right"><p>View: <b id="viewtxt">Third-person (V)</b></p><p>Mode: <b id="modetxt">Casual</b></p><p id="rankedtxt" style="display:none">Ranked: 0:00.0</p><p>Gold ring = next tree</p></div></div>
 <div class="hud panel" id="align"></div>
 <div class="hud" id="levers">
 <div class="lever"><div class="stick" id="levWing"></div><div class="base"></div>Tarps</div>
@@ -57,6 +57,7 @@ button:active{transform:scale(.96)}
 <div id="help" class="show"><div class="card">
 <h2>🍒 Cherry Shaker Simulator</h2>
 <p><b>The job:</b> Drive to a tree, line the clamp up on the trunk, put the tarps around it, clamp, and shake. Cherries fall onto the tarps and conveyors and into the tank. When the tank is full (520), drop it — the tractor brings an empty one to back up to.</p>
+<p><b>Ranked:</b> one row — two lines of trees with an aisle down the middle, 8 trees per line (16 total), 130 cherries per tree. Timer starts when you start ranked and stops when every cherry is off every tree. Final time = elapsed + 0.5s per spilled cherry. Add your 3 initials at the end.</p>
 <ul>
 <li><b>Drive</b> — <code>W/S</code>, <code>A/D</code>, or the on-screen joystick</li>
 <li><b>Line up</b> — get the hub under 0.60 m from the trunk, facing it square (banner turns green)</li>
@@ -67,7 +68,19 @@ button:active{transform:scale(.96)}
 <li><b>View</b> — <code>V</code>; drag the view to orbit / look around, double-click / double-tap to reset</li>
 <li><b>Steering wheel</b> — in first-person, drag around the wheel (clockwise = steer right)</li>
 </ul>
-<button id="startbtn" style="font-size:16px;padding:12px 20px">Start shaking →</button>
+<h3 style="margin-bottom:4px">Ranked leaderboard (global)</h3>
+<div id="rankedBoard"></div>
+<button id="startbtn" style="font-size:16px;padding:12px 20px">Start casual →</button>
+<button id="rankedbtn" style="font-size:16px;padding:12px 20px">Start ranked — 1 row →</button>
+</div></div>
+<div id="rankedFinish" style="position:fixed;inset:0;z-index:25;background:rgba(0,0,0,.78);display:none;overflow:auto;padding:18px"><div style="max-width:640px;margin:20px auto;background:#14251a;border-radius:16px;padding:20px;line-height:1.55;color:#fff">
+<h2 style="margin-top:0">🏆 Ranked complete!</h2>
+<p id="rankedScoreLine"></p>
+<p>Your 3 initials: <input id="rankedInitials" maxlength="3" placeholder="ABC" style="width:90px;font-size:20px;text-align:center;text-transform:uppercase;padding:6px;border-radius:8px;border:1px solid #fff5"></p>
+<p><button id="rankedSaveBtn" style="font-size:16px;padding:12px 20px">Save score →</button></p>
+<p id="rankedSaveMsg" style="color:#ffe27a"></p>
+<div id="rankedFinishBoard"></div>
+<p><button id="rankedAgainBtn" style="font-size:14px;padding:10px 16px">Play ranked again</button> <button id="rankedCasualBtn" style="font-size:14px;padding:10px 16px">Play casual</button></p>
 </div></div>
 <script>__THREE__</script>
 <script>__GAME__</script>
