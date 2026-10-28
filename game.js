@@ -613,6 +613,23 @@ function staticTarpY(lx,lz){
 //    world 1.65 m, 0.15 m below the rim at 1.80 m). The fill is
 //    stored as group.userData.fill, so pickup code does not depend
 //    on child indices.
+// OPF tank lettering, 2026-10-27: white "OPF", centred, on the
+// front (+Z, clamp side) and back (-Z) faces of every tank.
+// Shared canvas texture + plane, created once; makeTank() adds
+// one plane per face, just outside the wall outer face (0.75 m).
+// MeshBasicMaterial so the white stays white in any light, and
+// transparent so only the letters show, not a white rectangle.
+// depthWrite off so the transparent tank wall behind it still
+// renders correctly.
+var opfTex=(function(){
+  var c=document.createElement('canvas'); c.width=512; c.height=256;
+  var x=c.getContext('2d'); x.clearRect(0,0,512,256);
+  x.fillStyle='#ffffff'; x.font='bold 180px Arial, sans-serif';
+  x.textAlign='center'; x.textBaseline='middle';
+  x.fillText('OPF',256,128); return new THREE.CanvasTexture(c);
+})();
+var opfMat=new THREE.MeshBasicMaterial({map:opfTex,transparent:true,depthWrite:false});
+var opfGeo=new THREE.PlaneGeometry(1.2,0.6);
 function makeTank(){
   var g=new THREE.Group();
   var wallMat=new THREE.MeshLambertMaterial({color:0xcccccc,transparent:true,opacity:0.35,side:THREE.DoubleSide,depthWrite:false});
@@ -638,6 +655,8 @@ function makeTank(){
   var water=box(g,1.34,0.05,1.34,0x3a7bd5,0,-0.55,0);
   water.material.transparent=true; water.material.opacity=0; water.visible=false;
   g.userData.fill=fill; g.userData.water=water;
+  var opfF=new THREE.Mesh(opfGeo,opfMat); opfF.position.set(0,0,0.76); g.add(opfF);
+  var opfB=new THREE.Mesh(opfGeo,opfMat); opfB.position.set(0,0,-0.76); opfB.rotation.y=Math.PI; g.add(opfB);
   // Use userData.fill everywhere, never children indices, for
   // the fill — the group also holds walls, rim, posts and bottom.
   return g;
@@ -839,7 +858,6 @@ function npcUpdate(dt){
 var stats={trees:0,collected:0,lost:0,tanks:0};
 var targetTree=null, grippedTree=null, shakeTimer=0, msgTimer=0;
 function setMsg(s){ $('msg').textContent=s; msgTimer=4; }
-function setStep(s){ $('steps').textContent=s; }
 function updateHUD(){
   $('viewtxt').textContent=(viewMode==='third'?'Third-person (V)':'First-person cab (V)');
   if($('modetxt')) $('modetxt').textContent=IS_RANKED?'Ranked — 1 row':'Casual';
@@ -902,7 +920,6 @@ function showRankedFinish(){
   $('rankedScoreLine').innerHTML='Final time: <b>'+fmtRankedTime(rankedFinal)+'</b><br>Elapsed: '+fmtRankedTime(rankedElapsed)+'<br>Spilled: '+stats.lost+' x 0.5s = '+(0.5*stats.lost).toFixed(1)+'s penalty<br>Trees: '+stats.trees+'  •  Collected: '+stats.collected+'  •  Lost: '+stats.lost;
   $('rankedFinish').style.display='block';
   renderRankedBoard($('rankedFinishBoard'));
-  setStep('Ranked complete — add your 3 initials.');
 }
 function checkRankedFinish(){
   if(!IS_RANKED||!rankedRunning||rankedFinished) return;
@@ -1715,26 +1732,22 @@ function animate(){
   npcUpdate(dt);
   updateCherries(dt);
   checkRankedFinish();
-  // --- target / alignment HUD ---
+  // --- target ring + In Position, 2026-10-27: the alignment
+  // box and step text were removed, but a single green
+  // "In Position" line returns at the old top-centre spot,
+  // shown only when unclamped and alignment() says ok
+  // (hub <0.60 m, facing >0.85) — the same condition that
+  // makes a clamp actually take the tree. Otherwise blank.
   targetTree=nearestUnharvested();
+  var inPosA=targetTree?alignment(targetTree):null;
+  $('inpos').textContent=(!M.gripped&&inPosA&&inPosA.ok)?'In Position':'';
   trees.forEach(function(t){
     var isT=(t===targetTree);
     t.ring.visible=!t.harvested;
     if(isT) t.ring.material.color.set(0xffd23f); else if(!t.harvested) t.ring.material.color.set(0xffffff);
     t.ring.material.opacity=isT?0.95:0.35;
   });
-  var a=targetTree?alignment(targetTree):{dist:0,lat:0,face:0,hub:9,ok:false};
-  if(!targetTree){ $('align').textContent='Orchard complete — every tree shaken!'; setStep('Done. Press R? No — just enjoy the full tanks.'); }
-  else if(M.gripped&&grippedTree){ $('align').textContent='CLAMPED: tree '+grippedTree.id+' — hold SHAKE to strip it. Tarps '+(M.wingsOpen?'CLOSED around tree':'OPEN — most cherries will hit the ground, centre ones still go via the static tarp'); setStep('Step 4: Shake (hold Space / SHAKE button)'); }
-  else if(M.gripped){ $('align').textContent='CLAMPED on air — no tree in the clamp, so shake will not strip anything. Release the clamp (G) to drive on, then clamp on a tree.'; setStep('Release clamp (G), then drive to a tree'); }
-  else if(a.ok){ $('align').textContent='✓ IN POSITION — hub '+a.hub.toFixed(2)+' m off trunk (under 0.60 m). Close tarps (E), then clamp (G), then hold SHAKE.'; $('align').style.color='#b6ff9e'; setStep('Step 2: Close tarps (E)  •  Step 3: Clamp (G)  •  Step 4: Hold SHAKE'); }
-  else {
-    $('align').style.color='#fff';
-    $('align').textContent='Target tree '+targetTree.id+' — hub '+a.hub.toFixed(2)+' m off trunk (need under 0.60 m), dist '+a.dist.toFixed(1)+' m, offset '+a.lat.toFixed(1)+' m, facing '+(a.face*100).toFixed(0)+'% — drive so the hub centres on the trunk.';
-    setStep(M.wingsOpen?'Step 1: Line up (green ring = go)':'Step 1: Line up  •  Step 2: Close tarps (E)');
-  }
   if(M.tankFill>=M.tankCap){
-    if(tankState==='mounted') setStep('TANK FULL — stop, Drop Tank (T), drive forward for the tractor swap.');
     $('tanktxt').textContent='TANK FULL — '+Math.floor(M.tankFill)+' / '+M.tankCap;
   }
   if(msgTimer>0){ msgTimer-=dt; if(msgTimer<=0) $('msg').textContent=''; }

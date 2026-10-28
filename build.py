@@ -15,8 +15,7 @@ html = """<!DOCTYPE html>
 #top h1{margin:0;font-size:16px} #top p{margin:2px 0 0;font-size:12px;opacity:.9}
 #tankwrap{width:210px;height:14px;background:#222;border-radius:8px;overflow:hidden;margin-top:5px}
 #tankbar{height:100%;width:0%;background:linear-gradient(90deg,#ff5a5a,#d21f2e)}
-#align{top:86px;left:50%;transform:translateX(-50%);text-align:center;font-size:14px;font-weight:600;text-shadow:0 1px 3px #000;max-width:92vw}
-#steps{bottom:118px;left:50%;transform:translateX(-50%);font-size:13px;text-align:center}
+#inpos{top:130px;left:50%;transform:translateX(-50%);text-align:center;font-size:16px;font-weight:700;color:#4dff4d;text-shadow:0 1px 3px #000}
 #msg{bottom:92px;left:50%;transform:translateX(-50%);font-size:13px;color:#ffe27a;text-align:center;max-width:92vw}
 button{pointer-events:auto;cursor:pointer;border:0;border-radius:12px;padding:10px 12px;font-weight:700;font-size:13px;background:#ffd23f;color:#222;user-select:none;-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;-webkit-touch-callout:none;touch-action:none}
 button:active{transform:scale(.96)}
@@ -34,19 +33,19 @@ button:active{transform:scale(.96)}
 #help.show{display:block}
 #help .card{max-width:640px;margin:20px auto;background:#14251a;border-radius:16px;padding:20px;line-height:1.55}
 #help h2{margin-top:0} #help li{margin:4px 0} code{background:#0005;padding:1px 5px;border-radius:5px}
-@media(max-width:640px){#levers{display:none} #top h1{font-size:14px} #steps{bottom:132px}}
+@media(max-width:640px){#levers{display:none} #top h1{font-size:14px}}
 </style></head><body>
 <div id="game"></div>
 <div class="hud" id="top"><div class="panel"><h1>🍒 Cherry Shaker — OMC One-Man</h1><p id="stat"></p><div id="tankwrap"><div id="tankbar"></div></div><p id="tanktxt"></p></div>
 <div class="panel" style="text-align:right"><p>View: <b id="viewtxt">Third-person (V)</b></p><p>Mode: <b id="modetxt">Casual</b></p><p id="rankedtxt" style="display:none">Ranked: 0:00.0</p><p>Gold ring = next tree</p></div></div>
-<div class="hud panel" id="align"></div>
+<div class="hud" id="inpos"></div>
 <div class="hud" id="levers">
 <div class="lever"><div class="stick" id="levWing"></div><div class="base"></div>Tarps</div>
 <div class="lever"><div class="stick" id="levGrip"></div><div class="base"></div>Clamp</div>
 <div class="lever"><div class="stick" id="levShake"></div><div class="base"></div>Shake</div>
 <div class="lever"><div class="stick" id="levTank"></div><div class="base"></div>Tank</div>
 </div>
-<div class="hud" id="steps"></div><div class="hud" id="msg"></div>
+<div class="hud" id="msg"></div>
 <div class="hud" id="controls">
 <div id="joy"><div id="knob"></div></div>
 <div id="btns">
